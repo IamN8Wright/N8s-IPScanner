@@ -1,0 +1,11 @@
+N8s IP Scanner v2.3.6
+
+Hostname-Priority Balanced release
+
+- Keeps the v2.3.5 balanced discovery speed and 300 ms default scan timeout.
+- Limits hostname enrichment to six devices at a time instead of allowing many simultaneous DNS/NetBIOS lookups.
+- Extends the hostname enrichment budget to 3.2 seconds for discovered devices only.
+- Gives reverse DNS up to 2.8 seconds and NetBIOS up to 2.4 seconds to answer.
+- Adds a short post-discovery settle delay before hostname enrichment to improve reliability on slower embedded and AV endpoints.
+- Offline/unused IP addresses do not pay the longer hostname cost, preserving a much faster scan than the older sequential behavior.
+- Keeps the existing InNasc XML export, OUI lookup, NIC configuration, branding, and GitHub update features.

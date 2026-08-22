@@ -20,12 +20,16 @@ public sealed class IpScanner
         @"^\s*(?<name>[^\s<]{1,15})\s+<00>\s+UNIQUE\s+Registered",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
+    // Discovery can remain moderately parallel, but Windows name resolution is much
+    // more reliable when we do not launch dozens of DNS/NetBIOS lookups at once.
+    private static readonly SemaphoreSlim HostnameLookupGate = new(6, 6);
+
     public async Task<ScanResult?> ScanAsync(string ipAddress, int timeoutMs, CancellationToken cancellationToken)
     {
         try
         {
-            // Balanced profile: give web-capable AV endpoints a little more time to answer
-            // without turning empty-address scans back into a slow sequential crawl.
+            // Balanced discovery: still responsive on empty addresses, while allowing
+            // slower web-capable AV endpoints a reasonable window to answer.
             var webTimeout = Math.Min(Math.Max(timeoutMs, 150), 600);
 
             var pingTask = PingAsync(ipAddress, timeoutMs, cancellationToken);
@@ -124,15 +128,26 @@ public sealed class IpScanner
 
     private static async Task<string> ResolveBestHostnameAsync(string ipAddress, CancellationToken cancellationToken)
     {
-        // Balanced hostname enrichment happens only after a device is confirmed online.
-        // Live devices get enough time for slower reverse-DNS/NetBIOS responses while
-        // empty IPs remain governed by the shorter scan timeout.
-        const int hostnameBudgetMs = 1600;
-        const int dnsTimeoutMs = 1250;
-        const int netBiosTimeoutMs = 1250;
+        // Hostname-priority balanced profile:
+        // - only six devices perform hostname work at once;
+        // - live devices get a few seconds for Windows name resolution;
+        // - offline addresses never pay this cost because enrichment begins only after discovery.
+        const int hostnameBudgetMs = 3200;
+        const int dnsTimeoutMs = 2800;
+        const int netBiosTimeoutMs = 2400;
+        const int settleDelayMs = 80;
+
+        var gateEntered = false;
 
         try
         {
+            await HostnameLookupGate.WaitAsync(cancellationToken);
+            gateEntered = true;
+
+            // A tiny pause after discovery gives ARP/name-resolution state time to settle,
+            // which helps on slower embedded and AV endpoints without materially slowing a scan.
+            await Task.Delay(settleDelayMs, cancellationToken);
+
             using var budgetCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             budgetCts.CancelAfter(hostnameBudgetMs);
 
@@ -157,6 +172,13 @@ public sealed class IpScanner
         catch
         {
             // Hostname lookup is best-effort only.
+        }
+        finally
+        {
+            if (gateEntered)
+            {
+                HostnameLookupGate.Release();
+            }
         }
 
         return "Unknown";
