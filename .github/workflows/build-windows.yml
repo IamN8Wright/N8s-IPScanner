@@ -78,7 +78,7 @@ jobs:
             dist-single/N8s IP Scanner.exe
             N8s-IPScanner-win-x64.zip
 
-      - name: Create tag and GitHub Release when version is new
+      - name: Create or repair GitHub Release
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
@@ -86,15 +86,29 @@ jobs:
         run: |
           git fetch --tags
           $existingTag = git tag --list $env:RELEASE_TAG
-          if (-not [string]::IsNullOrWhiteSpace($existingTag)) {
-            Write-Host "$env:RELEASE_TAG already exists. Build artifact created; release publication skipped."
-            exit 0
+
+          if ([string]::IsNullOrWhiteSpace($existingTag)) {
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag -a $env:RELEASE_TAG -m "Release $env:RELEASE_TAG"
+            git push origin $env:RELEASE_TAG
+            Write-Host "Created tag $env:RELEASE_TAG"
+          }
+          else {
+            Write-Host "Tag $env:RELEASE_TAG already exists."
           }
 
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -a $env:RELEASE_TAG -m "Release $env:RELEASE_TAG"
-          git push origin $env:RELEASE_TAG
+          gh release view $env:RELEASE_TAG *> $null
+          $releaseExists = $LASTEXITCODE -eq 0
+
+          if ($releaseExists) {
+            Write-Host "Release $env:RELEASE_TAG already exists. Refreshing EXE and ZIP assets."
+            gh release upload $env:RELEASE_TAG `
+              "dist-single\N8s IP Scanner.exe" `
+              "N8s-IPScanner-win-x64.zip" `
+              --clobber
+            exit $LASTEXITCODE
+          }
 
           $notesFile = "ReleaseNotes-$env:RELEASE_TAG.txt"
           if (Test-Path $notesFile) {
