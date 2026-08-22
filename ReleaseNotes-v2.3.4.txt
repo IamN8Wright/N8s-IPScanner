@@ -1,0 +1,6 @@
+N8s IP Scanner v2.3.4
+
+- Releases the current hostname-enrichment improvements as v2.3.4.
+- Live devices use bounded reverse-DNS and NetBIOS lookups to improve hostname detection without slowing empty/offline IP scans.
+- Keeps HTTP/HTTPS probing, MAC lookup, and OUI manufacturer lookup behavior intact.
+- Updates the application and updater version identifiers to 2.3.4.
