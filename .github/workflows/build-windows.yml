@@ -1,0 +1,56 @@
+name: Build Windows EXE
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    name: Build Windows single EXE
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore
+        run: dotnet restore "N8sIPScanner/N8sIPScanner.csproj" -r win-x64 --source https://api.nuget.org/v3/index.json
+
+      - name: Publish single EXE
+        run: dotnet publish "N8sIPScanner/N8sIPScanner.csproj" -c Release -r win-x64 --self-contained true --no-restore -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=None -p:DebugSymbols=false -o "dist-single"
+
+      - name: Package ZIP
+        shell: pwsh
+        run: Compress-Archive -Path "dist-single\*" -DestinationPath "N8s-IPScanner-win-x64.zip" -Force
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: N8s-IPScanner-win-x64
+          path: |
+            dist-single/N8s-IPScanner.exe
+            N8s-IPScanner-win-x64.zip
+
+      - name: Create GitHub Release for version tags
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create $env:GITHUB_REF_NAME `
+            "dist-single\N8s-IPScanner.exe" `
+            "N8s-IPScanner-win-x64.zip" `
+            --title $env:GITHUB_REF_NAME `
+            --generate-notes
