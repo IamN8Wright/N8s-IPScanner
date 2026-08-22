@@ -1,0 +1,8 @@
+bin/
+obj/
+dist-single/
+dist-scanner-single/
+*.user
+*.suo
+.vs/
+*.log
