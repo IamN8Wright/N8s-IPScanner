@@ -1,0 +1,11 @@
+N8s IP Scanner v2.3.5
+
+Balanced Scan release
+
+- Changed the default scan timeout from 200 ms to 300 ms.
+- Reduced scan parallelism to avoid racing past slower AV/network endpoints.
+- /24 scans now use up to 24 workers instead of 48.
+- Larger scans scale to 32 or 48 workers instead of 64 or 96.
+- Increased hostname-enrichment budget for slower reverse-DNS and NetBIOS responses.
+- Slightly widened the web-service response window while keeping empty-address scans responsive.
+- Keeps the existing InNasc XML export, OUI lookup, NIC configuration, branding, and GitHub update features.

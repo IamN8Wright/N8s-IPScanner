@@ -353,7 +353,7 @@ public sealed class MainForm : Form
             Size = new Size(80, 24)
         });
 
-        _timeoutBox.Text = "200";
+        _timeoutBox.Text = "300";
         _timeoutBox.Location = new Point(610, 26);
         _timeoutBox.Size = new Size(70, 24);
         _scanGroup.Controls.Add(_timeoutBox);
@@ -918,7 +918,7 @@ public sealed class MainForm : Form
         {
             var confirm = MessageBox.Show(
                 $"This scan includes {targets.Count:N0} addresses.\n\n" +
-                "Large subnet scans are now parallelized, but they can still create noticeable network traffic.\n\n" +
+                "Large subnet scans are parallelized and tuned for a balanced speed/accuracy profile, but they can still create noticeable network traffic.\n\n" +
                 "Continue?",
                 "Large Subnet Scan",
                 MessageBoxButtons.YesNo,
@@ -952,7 +952,7 @@ public sealed class MainForm : Form
 
         try
         {
-            SetStatus($"Scanning {total:N0} address(es) with up to {maxParallel} workers - {scanDescription}");
+            SetStatus($"Balanced scan: {total:N0} address(es), up to {maxParallel} workers - {scanDescription}");
 
             while ((nextIndex < total || pending.Count > 0) && !_scanCancellation.IsCancellationRequested)
             {
@@ -985,7 +985,7 @@ public sealed class MainForm : Form
 
                 if (scanItem.Result is not null || scanned % 10 == 0 || scanned == total)
                 {
-                    SetStatus($"Scanning... {scanned:N0} of {total:N0} complete. Found {_results.Count:N0} device(s). Workers: {maxParallel}. {scanDescription}");
+                    SetStatus($"Balanced scan... {scanned:N0} of {total:N0} complete. Found {_results.Count:N0} device(s). Workers: {maxParallel}. {scanDescription}");
                 }
             }
         }
@@ -1020,20 +1020,20 @@ public sealed class MainForm : Form
     {
         if (totalTargets <= 32)
         {
-            return Math.Max(1, totalTargets);
+            return Math.Max(1, Math.Min(totalTargets, 16));
         }
 
         if (totalTargets <= 256)
         {
-            return 48;
+            return 24;
         }
 
         if (totalTargets <= 1024)
         {
-            return 64;
+            return 32;
         }
 
-        return 96;
+        return 48;
     }
 
     private bool TryReadScanSettings(out List<string> targets, out int timeout, out string scanDescription)

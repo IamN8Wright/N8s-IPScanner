@@ -24,7 +24,9 @@ public sealed class IpScanner
     {
         try
         {
-            var webTimeout = Math.Min(Math.Max(timeoutMs, 100), 450);
+            // Balanced profile: give web-capable AV endpoints a little more time to answer
+            // without turning empty-address scans back into a slow sequential crawl.
+            var webTimeout = Math.Min(Math.Max(timeoutMs, 150), 600);
 
             var pingTask = PingAsync(ipAddress, timeoutMs, cancellationToken);
             var port80Task = IsPortOpenAsync(ipAddress, 80, webTimeout, cancellationToken);
@@ -122,11 +124,12 @@ public sealed class IpScanner
 
     private static async Task<string> ResolveBestHostnameAsync(string ipAddress, CancellationToken cancellationToken)
     {
-        // Hostname enrichment happens only after a device is confirmed online.
-        // This keeps empty IP scans fast while spending a small, useful budget on real devices.
-        const int hostnameBudgetMs = 1200;
-        const int dnsTimeoutMs = 950;
-        const int netBiosTimeoutMs = 950;
+        // Balanced hostname enrichment happens only after a device is confirmed online.
+        // Live devices get enough time for slower reverse-DNS/NetBIOS responses while
+        // empty IPs remain governed by the shorter scan timeout.
+        const int hostnameBudgetMs = 1600;
+        const int dnsTimeoutMs = 1250;
+        const int netBiosTimeoutMs = 1250;
 
         try
         {
