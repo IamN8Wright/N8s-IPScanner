@@ -1,0 +1,4 @@
+N8s IP Scanner v2.3.2
+
+- Updated visible software/product name to N8s IP Scanner.
+- Retains hostname enrichment, fast parallel scans, InNasc XML export, and GitHub update checks.

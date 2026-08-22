@@ -1,0 +1,7 @@
+N8s IP Scanner v2.3.3
+
+- Updated main logo and application icon to the new N8/InN8 Labs mark.
+- Added InN8 Labs about/support section to Settings.
+- Fixed GitHub update check repo URL after the display-name update.
+- Added GitHub Actions workflow for finished Windows EXE releases.
+- No deep scan or AV fingerprinting features were added.

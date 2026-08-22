@@ -1,0 +1,14 @@
+Default single EXE build:
+
+cd /d "C:\Users\atomi\Downloads\N8s_IPScanner_CSharp_WinForms_HostnameEnrichment_BuildKit\N8s_IPScanner_CSharp_WinForms_HostnameEnrichment"
+
+Build-SingleExe.cmd
+
+
+Manual dotnet command:
+
+cd /d "C:\Users\atomi\Downloads\N8s_IPScanner_CSharp_WinForms_HostnameEnrichment_BuildKit\N8s_IPScanner_CSharp_WinForms_HostnameEnrichment\N8s IP Scanner"
+
+dotnet restore "N8s IP Scanner.csproj" -r win-x64 --source https://api.nuget.org/v3/index.json
+
+dotnet publish "N8s IP Scanner.csproj" -c Release -r win-x64 --self-contained true --no-restore -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=None -p:DebugSymbols=false -o "..\dist-single"

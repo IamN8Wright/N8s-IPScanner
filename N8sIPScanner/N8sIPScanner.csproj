@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Title>N8s IP Scanner</Title>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>N8s IP Scanner</AssemblyName>
+    <RootNamespace>N8sIPScanner</RootNamespace>
+    <ApplicationIcon>app.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <UseAppHost>true</UseAppHost>
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+<Version>2.3.3</Version>
+    <FileVersion>2.3.3.0</FileVersion>
+    <AssemblyVersion>2.3.3.0</AssemblyVersion>
+    <Company>InN8 Labs</Company>
+    <Product>N8s IP Scanner</Product>
+    <Description>N8s IP Scanner</Description>
+    <Copyright>Created for authorized network scanning only.</Copyright>
+    <RestoreIgnoreFailedSources>true</RestoreIgnoreFailedSources>
+    <DisableImplicitNuGetFallbackFolder>true</DisableImplicitNuGetFallbackFolder>
+  </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="logo.png" LogicalName="N8sIPScanner.logo.png" />
+  </ItemGroup>
+</Project>
+
+
