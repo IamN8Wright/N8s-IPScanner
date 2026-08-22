@@ -15,9 +15,9 @@
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
-    <Version>2.3.6</Version>
-    <FileVersion>2.3.6.0</FileVersion>
-    <AssemblyVersion>2.3.6.0</AssemblyVersion>
+    <Version>2.3.7</Version>
+    <FileVersion>2.3.7.0</FileVersion>
+    <AssemblyVersion>2.3.7.0</AssemblyVersion>
     <Company>InN8 Labs</Company>
     <Product>N8s IP Scanner</Product>
     <Description>N8s IP Scanner</Description>
