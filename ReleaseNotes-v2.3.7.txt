@@ -1,0 +1,10 @@
+N8s IP Scanner v2.3.7
+
+Reduced-Pressure Hostname release
+
+- Cuts active discovery pressure roughly in half by limiting scanner probes to 12 devices at a time.
+- Cuts hostname enrichment concurrency from six devices to three.
+- Increases the post-discovery settle delay from 80 ms to 160 ms before DNS/NetBIOS hostname work begins.
+- Keeps the 300 ms default probe timeout so offline addresses do not become excessively slow.
+- Keeps the longer hostname-resolution budget introduced in v2.3.6.
+- Intended to move closer to the hostname reliability of the older build while remaining faster than a largely sequential scan.
