@@ -58,17 +58,12 @@ Software Updates → Check GitHub
 It checks the latest GitHub release from:
 
 ```text
-IamN8Wright/N8s IP Scanner
+IamN8Wright/N8s-IPScanner
 ```
 
-To make updates work, publish a GitHub release with a newer version tag, such as:
+Release builds are now handled by GitHub Actions. The workflow reads the version from `N8sIPScanner/N8sIPScanner.csproj`, builds the self-contained Windows EXE and ZIP, creates the matching `vX.Y.Z` tag when it is new, and publishes the GitHub Release with those assets.
 
-```text
-v2.3.1 or v2.4.0
-```
-
-Then attach the new EXE or ZIP as a release asset.
-
+The workflow can also be started manually from **Actions → Build Windows EXE → Run workflow**. If a release tag is entered manually, it must match the project version.
 
 ### Hostname enrichment
 
@@ -120,7 +115,6 @@ dotnet publish "N8s IP Scanner.csproj" -c Release -r win-x64 --self-contained tr
 ## Name update
 
 Visible product name updated to `N8s IP Scanner`.
-
 
 ## v2.3.3 Branding/About update
 
