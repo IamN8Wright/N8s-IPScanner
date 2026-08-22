@@ -2,11 +2,14 @@ name: Build Windows EXE
 
 on:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag (leave blank to use the version from the project file)"
+        required: false
+        type: string
   push:
     branches:
       - main
-    tags:
-      - "v*"
 
 permissions:
   contents: write
@@ -19,6 +22,38 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Resolve release version
+        id: release
+        shell: pwsh
+        run: |
+          [xml]$project = Get-Content "N8sIPScanner/N8sIPScanner.csproj"
+          $version = ($project.Project.PropertyGroup.Version | Select-Object -First 1).Trim()
+          if ([string]::IsNullOrWhiteSpace($version)) {
+            throw "Could not read <Version> from N8sIPScanner.csproj"
+          }
+
+          $requested = "${{ github.event.inputs.release_tag }}"
+          if ([string]::IsNullOrWhiteSpace($requested)) {
+            $tag = "v$version"
+          }
+          else {
+            $tag = $requested.Trim()
+            if (-not $tag.StartsWith("v")) {
+              $tag = "v$tag"
+            }
+          }
+
+          $expectedTag = "v$version"
+          if ($tag -ne $expectedTag) {
+            throw "Requested release tag '$tag' does not match project version '$expectedTag'. Bump the project version first."
+          }
+
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          Write-Host "Building release $tag"
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
@@ -38,19 +73,41 @@ jobs:
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v7
         with:
-          name: N8s-IPScanner-win-x64
+          name: N8s-IPScanner-${{ steps.release.outputs.tag }}-win-x64
           path: |
             dist-single/N8s IP Scanner.exe
             N8s-IPScanner-win-x64.zip
 
-      - name: Create GitHub Release for version tags
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Create tag and GitHub Release when version is new
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: |
-          gh release create $env:GITHUB_REF_NAME `
-            "dist-single\N8s IP Scanner.exe" `
-            "N8s-IPScanner-win-x64.zip" `
-            --title $env:GITHUB_REF_NAME `
-            --generate-notes
+          git fetch --tags
+          $existingTag = git tag --list $env:RELEASE_TAG
+          if (-not [string]::IsNullOrWhiteSpace($existingTag)) {
+            Write-Host "$env:RELEASE_TAG already exists. Build artifact created; release publication skipped."
+            exit 0
+          }
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a $env:RELEASE_TAG -m "Release $env:RELEASE_TAG"
+          git push origin $env:RELEASE_TAG
+
+          $notesFile = "ReleaseNotes-$env:RELEASE_TAG.txt"
+          if (Test-Path $notesFile) {
+            gh release create $env:RELEASE_TAG `
+              "dist-single\N8s IP Scanner.exe" `
+              "N8s-IPScanner-win-x64.zip" `
+              --title $env:RELEASE_TAG `
+              --notes-file $notesFile
+          }
+          else {
+            gh release create $env:RELEASE_TAG `
+              "dist-single\N8s IP Scanner.exe" `
+              "N8s-IPScanner-win-x64.zip" `
+              --title $env:RELEASE_TAG `
+              --generate-notes
+          }
