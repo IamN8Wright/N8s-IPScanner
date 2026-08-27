@@ -4,7 +4,6 @@ using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Text.RegularExpressions;
-using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -16,46 +15,45 @@ public sealed class IpScanner
         @"^\s*(?<ip>\d{1,3}(?:\.\d{1,3}){3})\s+(?<mac>[0-9a-fA-F-]{17})\s+",
         RegexOptions.Compiled);
 
-    private static readonly Regex NetBiosNameRegex = new(
-        @"^\s*(?<name>[^\s<]{1,15})\s+<00>\s+UNIQUE\s+Registered",
-        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    // Reliability-first scan pressure. This is deliberately much quieter than the
+    // fast 2.3.x profiles so slower embedded/AV devices have time to answer.
+    private static readonly SemaphoreSlim DiscoveryGate = new(6, 6);
 
-    // Keep the UI responsive, but cap actual network pressure below the number of
-    // tasks the form may queue. Twelve active probes is roughly half the v2.3.6 /24 pressure.
-    private static readonly SemaphoreSlim DiscoveryGate = new(12, 12);
-
-    // Hostname lookups are deliberately much quieter than discovery. This gives
-    // Windows DNS/NetBIOS resolution more room to return names reliably.
-    private static readonly SemaphoreSlim HostnameLookupGate = new(3, 3);
+    // The older scanner behavior effectively allowed hostname resolution to finish
+    // instead of racing many short DNS/NetBIOS lookups. Serialize reverse DNS to
+    // reproduce that behavior without blocking offline addresses indefinitely.
+    private static readonly SemaphoreSlim HostnameLookupGate = new(1, 1);
 
     public async Task<ScanResult?> ScanAsync(string ipAddress, int timeoutMs, CancellationToken cancellationToken)
     {
-        var discoveryGateEntered = false;
-
         try
         {
+            ProbeResult probe;
+
             await DiscoveryGate.WaitAsync(cancellationToken);
-            discoveryGateEntered = true;
+            try
+            {
+                probe = await ProbeAsync(ipAddress, timeoutMs, cancellationToken);
 
-            var webTimeout = Math.Min(Math.Max(timeoutMs, 150), 600);
+                // Second-chance probe for addresses that looked dead on the first pass.
+                // This is the main stabilizer for device counts across repeated scans.
+                if (!probe.IsAlive)
+                {
+                    await Task.Delay(120, cancellationToken);
+                    probe = await ProbeAsync(ipAddress, timeoutMs, cancellationToken);
+                }
+            }
+            finally
+            {
+                DiscoveryGate.Release();
+            }
 
-            var pingTask = PingAsync(ipAddress, timeoutMs, cancellationToken);
-            var port80Task = IsPortOpenAsync(ipAddress, 80, webTimeout, cancellationToken);
-            var port443Task = IsPortOpenAsync(ipAddress, 443, webTimeout, cancellationToken);
-
-            await Task.WhenAll(pingTask, port80Task, port443Task);
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var pingSuccess = await pingTask;
-            var port80Open = await port80Task;
-            var port443Open = await port443Task;
-
-            if (!pingSuccess && !port80Open && !port443Open)
+            if (!probe.IsAlive)
             {
                 return null;
             }
 
-            var hostname = await ResolveBestHostnameAsync(ipAddress, cancellationToken);
+            var hostname = await ResolveLegacyHostnameAsync(ipAddress, cancellationToken);
             var macAddress = GetMacAddressFromArp(ipAddress);
 
             return new ScanResult
@@ -64,22 +62,35 @@ public sealed class IpScanner
                 Hostname = hostname,
                 MacAddress = macAddress,
                 Manufacturer = OuiLookupService.Lookup(macAddress),
-                Status = GetStatus(pingSuccess, port80Open, port443Open),
-                Port80Open = port80Open,
-                Port443Open = port443Open
+                Status = GetStatus(probe.PingSuccess, probe.Port80Open, probe.Port443Open),
+                Port80Open = probe.Port80Open,
+                Port443Open = probe.Port443Open
             };
         }
         catch
         {
             return null;
         }
-        finally
-        {
-            if (discoveryGateEntered)
-            {
-                DiscoveryGate.Release();
-            }
-        }
+    }
+
+    private static async Task<ProbeResult> ProbeAsync(
+        string ipAddress,
+        int timeoutMs,
+        CancellationToken cancellationToken)
+    {
+        var webTimeout = Math.Min(Math.Max(timeoutMs, 300), 900);
+
+        var pingTask = PingAsync(ipAddress, timeoutMs, cancellationToken);
+        var port80Task = IsPortOpenAsync(ipAddress, 80, webTimeout, cancellationToken);
+        var port443Task = IsPortOpenAsync(ipAddress, 443, webTimeout, cancellationToken);
+
+        await Task.WhenAll(pingTask, port80Task, port443Task);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        return new ProbeResult(
+            await pingTask,
+            await port80Task,
+            await port443Task);
     }
 
     private static string GetStatus(bool pingSuccess, bool port80Open, bool port443Open)
@@ -117,7 +128,11 @@ public sealed class IpScanner
         }
     }
 
-    private static async Task<bool> IsPortOpenAsync(string ipAddress, int port, int timeoutMs, CancellationToken cancellationToken)
+    private static async Task<bool> IsPortOpenAsync(
+        string ipAddress,
+        int port,
+        int timeoutMs,
+        CancellationToken cancellationToken)
     {
         try
         {
@@ -140,15 +155,10 @@ public sealed class IpScanner
         }
     }
 
-    private static async Task<string> ResolveBestHostnameAsync(string ipAddress, CancellationToken cancellationToken)
+    private static async Task<string> ResolveLegacyHostnameAsync(
+        string ipAddress,
+        CancellationToken cancellationToken)
     {
-        // Keep the generous v2.3.6 lookup window, but cut concurrency and give the
-        // local ARP/name-resolution state a little longer to settle before asking for a name.
-        const int hostnameBudgetMs = 3200;
-        const int dnsTimeoutMs = 2800;
-        const int netBiosTimeoutMs = 2400;
-        const int settleDelayMs = 160;
-
         var gateEntered = false;
 
         try
@@ -156,26 +166,19 @@ public sealed class IpScanner
             await HostnameLookupGate.WaitAsync(cancellationToken);
             gateEntered = true;
 
-            await Task.Delay(settleDelayMs, cancellationToken);
+            // Give Windows/ARP state a moment to settle, then use the simple reverse-DNS
+            // lookup style from the older scanner rather than the newer DNS/NetBIOS race.
+            await Task.Delay(200, cancellationToken);
 
-            using var budgetCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            budgetCts.CancelAfter(hostnameBudgetMs);
+            var lookupTask = Dns.GetHostEntryAsync(ipAddress);
+            var host = await lookupTask.WaitAsync(TimeSpan.FromSeconds(5), cancellationToken);
 
-            var lookups = new List<Task<string>>
+            if (!string.IsNullOrWhiteSpace(host.HostName))
             {
-                ResolveDnsHostnameAsync(ipAddress, dnsTimeoutMs, budgetCts.Token),
-                ResolveNetBiosHostnameAsync(ipAddress, netBiosTimeoutMs, budgetCts.Token)
-            };
-
-            while (lookups.Count > 0 && !budgetCts.IsCancellationRequested)
-            {
-                var completed = await Task.WhenAny(lookups);
-                lookups.Remove(completed);
-
-                var hostname = await completed;
-                if (IsUsefulHostname(hostname))
+                var value = host.HostName.Trim();
+                if (!string.Equals(value, "localhost", StringComparison.OrdinalIgnoreCase))
                 {
-                    return hostname;
+                    return value;
                 }
             }
         }
@@ -192,98 +195,6 @@ public sealed class IpScanner
         }
 
         return "Unknown";
-    }
-
-    private static async Task<string> ResolveDnsHostnameAsync(string ipAddress, int timeoutMs, CancellationToken cancellationToken)
-    {
-        try
-        {
-            var lookupTask = Dns.GetHostEntryAsync(ipAddress);
-            var timeoutTask = Task.Delay(timeoutMs, cancellationToken);
-
-            var completed = await Task.WhenAny(lookupTask, timeoutTask);
-            if (completed != lookupTask)
-            {
-                return "Unknown";
-            }
-
-            var host = await lookupTask;
-            return string.IsNullOrWhiteSpace(host.HostName) ? "Unknown" : host.HostName.Trim();
-        }
-        catch
-        {
-            return "Unknown";
-        }
-    }
-
-    private static async Task<string> ResolveNetBiosHostnameAsync(string ipAddress, int timeoutMs, CancellationToken cancellationToken)
-    {
-        try
-        {
-            var psi = new ProcessStartInfo
-            {
-                FileName = "nbtstat",
-                Arguments = "-A " + ipAddress,
-                CreateNoWindow = true,
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true
-            };
-
-            using var process = Process.Start(psi);
-            if (process is null)
-            {
-                return "Unknown";
-            }
-
-            var outputTask = process.StandardOutput.ReadToEndAsync();
-            var exitTask = process.WaitForExitAsync(cancellationToken);
-            var timeoutTask = Task.Delay(timeoutMs, cancellationToken);
-
-            var completed = await Task.WhenAny(exitTask, timeoutTask);
-            if (completed != exitTask)
-            {
-                try { process.Kill(); } catch { }
-                return "Unknown";
-            }
-
-            var output = await outputTask;
-            foreach (var line in output.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries))
-            {
-                var match = NetBiosNameRegex.Match(line);
-                if (!match.Success)
-                {
-                    continue;
-                }
-
-                var candidate = match.Groups["name"].Value.Trim();
-                if (IsUsefulHostname(candidate))
-                {
-                    return candidate;
-                }
-            }
-        }
-        catch
-        {
-            // NetBIOS hostname lookup is best-effort only.
-        }
-
-        return "Unknown";
-    }
-
-    private static bool IsUsefulHostname(string? hostname)
-    {
-        if (string.IsNullOrWhiteSpace(hostname))
-        {
-            return false;
-        }
-
-        var value = hostname.Trim();
-        return !string.Equals(value, "Unknown", StringComparison.OrdinalIgnoreCase) &&
-               !string.Equals(value, "localhost", StringComparison.OrdinalIgnoreCase) &&
-               !string.Equals(value, "WORKGROUP", StringComparison.OrdinalIgnoreCase) &&
-               !string.Equals(value, "MSHOME", StringComparison.OrdinalIgnoreCase) &&
-               !value.StartsWith("__", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string GetMacAddressFromArp(string ipAddress)
@@ -307,7 +218,7 @@ public sealed class IpScanner
             }
 
             var output = process.StandardOutput.ReadToEnd();
-            if (!process.WaitForExit(350))
+            if (!process.WaitForExit(500))
             {
                 try { process.Kill(); } catch { }
                 return "Unknown";
@@ -333,5 +244,13 @@ public sealed class IpScanner
         }
 
         return "Unknown";
+    }
+
+    private readonly record struct ProbeResult(
+        bool PingSuccess,
+        bool Port80Open,
+        bool Port443Open)
+    {
+        public bool IsAlive => PingSuccess || Port80Open || Port443Open;
     }
 }

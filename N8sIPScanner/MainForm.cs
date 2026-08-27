@@ -353,7 +353,7 @@ public sealed class MainForm : Form
             Size = new Size(80, 24)
         });
 
-        _timeoutBox.Text = "300";
+        _timeoutBox.Text = "500";
         _timeoutBox.Location = new Point(610, 26);
         _timeoutBox.Size = new Size(70, 24);
         _scanGroup.Controls.Add(_timeoutBox);
@@ -527,7 +527,7 @@ public sealed class MainForm : Form
         _statusLabel.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
         Controls.Add(_statusLabel);
 
-        _exportButton.Text = "Export XML";
+        _exportButton.Text = "Export Excel";
         _exportButton.Enabled = false;
         _exportButton.Location = new Point(1000, 803);
         _exportButton.Size = new Size(125, 32);
@@ -552,7 +552,7 @@ public sealed class MainForm : Form
         _stopButton.Click += (_, _) => StopScan();
         _discoverSubnetButton.Click += (_, _) => ShowPassiveDiscovery();
         _clearButton.Click += (_, _) => ClearResults();
-        _exportButton.Click += (_, _) => ExportInNascXml();
+        _exportButton.Click += (_, _) => ExportExcel();
         _settingsButton.Click += (_, _) => ShowSettings();
         _resultsView.DoubleClick += (_, _) => OpenSelectedWebAddress();
 
@@ -918,7 +918,7 @@ public sealed class MainForm : Form
         {
             var confirm = MessageBox.Show(
                 $"This scan includes {targets.Count:N0} addresses.\n\n" +
-                "Large subnet scans are parallelized and tuned for a balanced speed/accuracy profile, but they can still create noticeable network traffic.\n\n" +
+                "Large subnet scans use a reliability-first profile with fewer simultaneous probes and retry logic, but they can still create noticeable network traffic.\n\n" +
                 "Continue?",
                 "Large Subnet Scan",
                 MessageBoxButtons.YesNo,
@@ -952,7 +952,7 @@ public sealed class MainForm : Form
 
         try
         {
-            SetStatus($"Balanced scan: {total:N0} address(es), up to {maxParallel} workers - {scanDescription}");
+            SetStatus($"Reliability scan: {total:N0} address(es), up to {maxParallel} workers - {scanDescription}");
 
             while ((nextIndex < total || pending.Count > 0) && !_scanCancellation.IsCancellationRequested)
             {
@@ -985,7 +985,7 @@ public sealed class MainForm : Form
 
                 if (scanItem.Result is not null || scanned % 10 == 0 || scanned == total)
                 {
-                    SetStatus($"Balanced scan... {scanned:N0} of {total:N0} complete. Found {_results.Count:N0} device(s). Workers: {maxParallel}. {scanDescription}");
+                    SetStatus($"Reliability scan... {scanned:N0} of {total:N0} complete. Found {_results.Count:N0} device(s). Workers: {maxParallel}. {scanDescription}");
                 }
             }
         }
@@ -1018,22 +1018,24 @@ public sealed class MainForm : Form
 
     private static int GetScanParallelism(int totalTargets)
     {
+        // Reliability-first profile. Fewer simultaneous probes reduce dropped replies
+        // from slower embedded, AV, and management interfaces.
         if (totalTargets <= 32)
         {
-            return Math.Max(1, Math.Min(totalTargets, 16));
+            return Math.Max(1, Math.Min(totalTargets, 4));
         }
 
         if (totalTargets <= 256)
         {
-            return 24;
+            return 6;
         }
 
         if (totalTargets <= 1024)
         {
-            return 32;
+            return 8;
         }
 
-        return 48;
+        return 12;
     }
 
     private bool TryReadScanSettings(out List<string> targets, out int timeout, out string scanDescription)
@@ -1244,7 +1246,7 @@ public sealed class MainForm : Form
         }
     }
 
-    private void ExportInNascXml()
+    private void ExportExcel()
     {
         if (_results.Count == 0)
         {
@@ -1258,8 +1260,8 @@ public sealed class MainForm : Form
 
         using var saveDialog = new SaveFileDialog
         {
-            Filter = "InNasc XML files (*.xml)|*.xml|All files (*.*)|*.*",
-            FileName = "InNasc-IPScan-Import.xml",
+            Filter = "Excel Workbook (*.xlsx)|*.xlsx|All files (*.*)|*.*",
+            FileName = "N8s-IPScan-Results.xlsx",
             InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.Desktop)
         };
 
@@ -1270,11 +1272,10 @@ public sealed class MainForm : Form
 
         try
         {
-            var document = InNascXmlExporter.Build(_results, _lastScanDescription);
-            document.Save(saveDialog.FileName);
+            ExcelExporter.Save(saveDialog.FileName, _results, _lastScanDescription);
 
             MessageBox.Show(
-                $"Saved InNasc XML import file to:\n{saveDialog.FileName}",
+                $"Saved Excel scan results to:\n{saveDialog.FileName}",
                 "Export Complete",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
@@ -1282,7 +1283,7 @@ public sealed class MainForm : Form
         catch (Exception ex)
         {
             MessageBox.Show(
-                $"Could not export InNasc XML.\n{ex.Message}",
+                $"Could not export Excel workbook.\n{ex.Message}",
                 "Export Error",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error);

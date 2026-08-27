@@ -21,7 +21,7 @@ public static class GitHubUpdateService
         var currentVersion = GetCurrentVersion();
 
         using var client = new HttpClient();
-        client.DefaultRequestHeaders.UserAgent.ParseAdd("N8s-IPScanner/2.3.7");
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("N8s-IPScanner/2.3.8");
         client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
 
         using var response = await client.GetAsync(LatestReleaseApiUrl, cancellationToken);

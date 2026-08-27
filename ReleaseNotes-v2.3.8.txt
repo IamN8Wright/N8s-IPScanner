@@ -1,0 +1,12 @@
+N8s IP Scanner v2.3.8
+
+Reliability + Excel Export release
+
+- Slows /24 scanning to a maximum of six active workers for more consistent device discovery.
+- Raises the default probe timeout from 300 ms to 500 ms.
+- Adds a second-chance probe before an address is declared offline.
+- Reverts hostname enrichment to a simple serialized reverse-DNS lookup style instead of the newer parallel DNS/NetBIOS race.
+- Gives discovered devices up to five seconds for reverse DNS to return a hostname.
+- Replaces the XML export workflow with a native Excel .xlsx workbook export.
+- Excel output includes IP address, hostname, MAC address, manufacturer, status, web-UI presence, and web URL.
+- Keeps OUI lookup, NIC configuration, branding, passive discovery, and GitHub update features.

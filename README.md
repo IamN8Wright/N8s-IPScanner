@@ -14,18 +14,18 @@ The scanner now uses controlled parallel scanning instead of scanning one IP at 
 - /24 scans should feel dramatically faster
 - Larger CIDR scans still warn before starting
 
-### InNasc XML export
+### Excel (.xlsx) export
 
 The old CSV export button is now:
 
 ```text
-Export XML
+Export Excel
 ```
 
 It saves:
 
 ```text
-InNasc-IPScan-Import.xml
+N8s-IPScan-Results.xlsx
 ```
 
 The XML maps discovered scan results into InNasc/AV Matrix-style equipment fields:
