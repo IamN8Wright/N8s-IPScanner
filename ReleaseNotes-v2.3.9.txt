@@ -1,0 +1,8 @@
+N8s IP Scanner v2.3.9
+
+Windows Icon Fix release
+
+- Replaces the old app icon with the official N8 logo supplied by the project owner.
+- Places the logo on a clean white rounded-square tile for better contrast on Windows 11 desktops and taskbars.
+- Builds the icon as a true multi-resolution Windows ICO with 16, 20, 24, 32, 40, 48, 64, 96, 128, and 256 pixel entries.
+- Keeps the v2.3.8 reliability-first scan behavior, hostname lookup changes, and Excel export intact.
